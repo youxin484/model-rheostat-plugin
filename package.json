@@ -1,0 +1,51 @@
+{
+  "name": "model-rheostat-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH 插件：在 composer 输入框右下角（模型选择器旁）加一个滑动变阻器控件，直接调节当前会话的模型推理强度",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "reasoning-effort",
+    "ui"
+  ],
+  "homepage": "https://github.com/youxin484/model-rheostat-plugin#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/youxin484/model-rheostat-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/youxin484/model-rheostat-plugin/issues"
+  },
+  "author": "youxin484",
+  "main": "./.dsh-plugin/index.mjs",
+  "exports": {
+    ".": "./.dsh-plugin/index.mjs",
+    "./client": "./.dsh-plugin/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "slots",
+        "modelDirectories",
+        "sessions"
+      ]
+    }
+  },
+  "scripts": {
+    "extract:logo": "node scripts/extract-fish-logo.mjs",
+    "fetch:react": "node dev/fetch-react.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

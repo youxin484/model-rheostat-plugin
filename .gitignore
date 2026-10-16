@@ -1,0 +1,7 @@
+# 本插件没有构建产物需要忽略：.dsh-plugin/ 下的 bundle 是手写的、必须入库
+# （DSH 安装后直接消费它，不需要 npm install / 构建步骤）。
+node_modules/
+dev/preview/vendor/
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>model-rheostat preview</title>
+<style>
+  :root {
+    --dsw-alias-bg-base:#ffffff;
+    --dsw-alias-bg-layer-1:#ffffff;
+    --dsw-alias-bg-layer-2:#f4f6f9;
+    --dsw-alias-border-l1:#e2e5ea;
+    --dsw-alias-border-l2:#cfd4dc;
+    --dsw-alias-brand-primary:#4176e6;
+    --dsw-alias-state-business-primary:#2b57c4;
+    --dsw-alias-label-primary:#16181d;
+    --dsw-alias-label-secondary:#5b6270;
+    --dsw-alias-label-tertiary:#8b93a1;
+    --dsw-alias-label-caption:#8b93a1;
+    --dsw-alias-interactive-bg-hover:#eef1f5;
+    --dsw-focus-ring-color:rgba(65,118,230,.40);
+    --dsw-alias-state-error-primary:#d94c4c;
+  }
+  .dark {
+    --dsw-alias-bg-base:#0e1116;
+    --dsw-alias-bg-layer-1:#161a21;
+    --dsw-alias-bg-layer-2:#1d222b;
+    --dsw-alias-border-l1:#2b313b;
+    --dsw-alias-border-l2:#3a4150;
+    --dsw-alias-brand-primary:#6f9bff;
+    --dsw-alias-state-business-primary:#4f7ff0;
+    --dsw-alias-label-primary:#e8ecf2;
+    --dsw-alias-label-secondary:#a7b0bd;
+    --dsw-alias-label-tertiary:#7d8797;
+    --dsw-alias-label-caption:#7d8797;
+    --dsw-alias-interactive-bg-hover:#20252e;
+    --dsw-focus-ring-color:rgba(111,155,255,.45);
+  }
+  html,body { margin:0; }
+  body { background:var(--dsw-alias-bg-base); color:var(--dsw-alias-label-primary);
+         font-family:"Segoe UI","Yu Gothic UI",system-ui,sans-serif; padding:20px 24px; }
+  h1 { font-size:13px; font-weight:600; margin:0 0 4px; color:var(--dsw-alias-label-secondary); }
+  .note { font-size:11px; color:var(--dsw-alias-label-tertiary); margin:0 0 18px; }
+  .case { display:flex; align-items:center; gap:14px; padding:6px 0; }
+  .case-tag { font-size:11px; color:var(--dsw-alias-label-tertiary); width:78px; flex:none; font-variant-numeric:tabular-nums; }
+  hr { border:0; border-top:1px solid var(--dsw-alias-border-l1); margin:18px 0; }
+
+  /* ---- 模拟 composer 工具行，用来检查真实间距 ---- */
+  .composer { background:var(--dsw-alias-bg-layer-1); border:1px solid var(--dsw-alias-border-l1);
+              border-radius:14px; padding:10px 12px; width:660px; box-sizing:border-box; }
+  .editor { min-height:34px; font-size:13px; color:var(--dsw-alias-label-tertiary); }
+  .row { display:flex; align-items:center; justify-content:space-between; margin-top:6px; }
+  .tools { display:flex; align-items:center; gap:8px; color:var(--dsw-alias-label-secondary); font-size:13px; }
+  .trailing { display:flex; align-items:center; gap:8px; }
+  .standardControls { display:flex; align-items:center; gap:8px; }
+  .modelSeat { display:flex; align-items:center; gap:4px; height:28px; padding:0 4px 0 8px; font-size:13px;
+               color:var(--dsw-alias-label-secondary); border-radius:6px; }
+  .modelSeat .eff { color:var(--dsw-alias-label-caption); }
+  .send { width:28px; height:28px; border-radius:50%; border:0; background:var(--dsw-alias-state-business-primary);
+          color:#fff; font-size:13px; display:grid; place-items:center; }
+  .pill { font-size:11px; color:var(--dsw-alias-label-tertiary); border:1px solid var(--dsw-alias-border-l1);
+          border-radius:10px; padding:1px 7px; }
+</style>
+</head>
+<body>
+  <h1>model-rheostat-plugin · 渲染预览</h1>
+  <p class="note">本页直接加载真实的 .dsh-plugin/client.js（真实 CSS + 真实组件），只把 DSH 的模型目录替换成假数据。</p>
+
+  <div class="composer">
+    <div class="editor">输入消息…</div>
+    <div class="row">
+      <div class="tools"><span>＋</span><span class="pill">默认权限</span></div>
+      <div class="trailing">
+        <div class="standardControls" id="slot-right"></div>
+        <div class="modelSeat">DeepSeek Flash <span class="eff">High</span> ⌄</div>
+        <button class="send">↑</button>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+  <h1>四个档位（检查刻度 / 填充 / 滑钮是否对齐）</h1>
+  <p class="note">每条轨道左端 = Off，右端 = Max；填充色应精确停在滑钮中心。</p>
+  <div id="cases"></div>
+
+  <hr>
+  <h1>深色主题</h1>
+  <div class="dark" id="dark" style="background:var(--dsw-alias-bg-base);padding:4px 0;"></div>
+
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script>
+  // ---- 1. 捕获 bundle，物化 factory --------------------------------------
+  window.__ModuleLoader__ = { load: function (entry) { window.__entry = entry; } };
+</script>
+<script src="../../.dsh-plugin/client.js"></script>
+<script>
+(function () {
+  var React = window.React;
+  var ReactDOM = window.ReactDOM;
+
+  if (!window.__entry) throw new Error('client.js did not register');
+  var mod = window.__entry.factory(function (name) {
+    if (name === 'react') return React;
+    throw new Error('unexpected require: ' + name);
+  });
+
+  // ---- 2. 假的模型目录（形状照抄 Host 的 modelCatalog 响应） ----------------
+  var EFFORTS = [
+    { id: 'off',  name: 'Off',  description: 'Use for simple tasks that do not need reasoning.' },
+    { id: 'low',  name: 'Low',  description: 'Prefer for routine or latency-sensitive tasks.' },
+    { id: 'high', name: 'High', description: 'The default balance for most tasks.' },
+    { id: 'max',  name: 'Max',  description: 'Reserve for the hardest quality-first tasks.' }
+  ];
+  var GROUPS = [{
+    id: 'deepseek-account', name: 'DeepSeek 账号',
+    models: [{ id: 'deepseek-flash', name: 'DeepSeek Flash', reasoning: { defaultEffort: 'high', efforts: EFFORTS } }]
+  }];
+
+  function createStore(initial) {
+    var snapshot = initial, listeners = [];
+    return {
+      getSnapshot: function () { return snapshot; },
+      subscribe: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (l) { return l !== fn; }); }; },
+      set: function (next) { snapshot = next; listeners.slice().forEach(function (l) { l(); }); }
+    };
+  }
+
+  var selectCalls = [];
+  window.__selectCalls = selectCalls;
+  function makeDirectory(effortId, opts) {
+    opts = opts || {};
+    var store = createStore({
+      current: { provider: 'deepseek-account', model: 'deepseek-flash', reasoningEffort: effortId },
+      routable: true,
+      groups: opts.groups === undefined ? GROUPS : opts.groups,
+      failures: [],
+      status: opts.status || 'ready',
+      pending: null,
+      error: null
+    });
+    return {
+      store: store,
+      load: function () { return Promise.resolve(store.getSnapshot()); },
+      select: function (selection) {
+        selectCalls.push(selection);
+        store.set(Object.assign({}, store.getSnapshot(), {
+          current: { provider: selection.provider, model: selection.model, reasoningEffort: selection.reasoningEffort }
+        }));
+        return Promise.resolve({ ok: true, value: undefined });
+      }
+    };
+  }
+
+  // ---- 3. 装进假 ctx，拿到注册好的组件 ------------------------------------
+  function mount(directory, opts) {
+    opts = opts || {};
+    var registered = null;
+    var ctx = {
+      modelDirectories: { directoryFor: function () { return directory; } },
+      sessions: { subagentAddress: function () { return opts.subagent ? 'agent-1' : undefined; } },
+      effect: function () { return function () {}; },
+      on: function () {},
+      get: function () { return undefined; },
+      slots: {
+        inject: function (key, cb) { cb(); },
+        register: function (decl, component) { registered = { decl: decl, component: component }; return registered; }
+      }
+    };
+    mod.apply(ctx);
+    if (registered === null) throw new Error('apply() registered nothing');
+    return { decl: registered.decl, Component: registered.component };
+  }
+
+  function renderInto(container, node) {
+    ReactDOM.createRoot(container).render(node);
+  }
+
+  function instance(effortId, opts) {
+    var directory = makeDirectory(effortId, opts);
+    var mounted = mount(directory, opts);
+    var props = mounted.decl.inject('session-1');
+    return { directory: directory, Component: mounted.Component, props: props };
+  }
+
+  // 主用例：塞进真实 composer 行的 standardControls 槽位
+  var main = instance('high');
+  renderInto(document.getElementById('slot-right'),
+    React.createElement(main.Component, main.props));
+
+  // 四个档位对照
+  var cases = document.getElementById('cases');
+  ['off', 'low', 'high', 'max'].forEach(function (effortId) {
+    var row = document.createElement('div');
+    row.className = 'case';
+    var tag = document.createElement('span');
+    tag.className = 'case-tag';
+    tag.textContent = 'effort = ' + effortId;
+    var host = document.createElement('div');
+    row.appendChild(tag); row.appendChild(host);
+    cases.appendChild(row);
+    var one = instance(effortId);
+    renderInto(host, React.createElement(one.Component, one.props));
+  });
+
+  // 深色主题（同一组件，父级换 token）
+  var dark = document.getElementById('dark');
+  var darkRow = document.createElement('div');
+  darkRow.className = 'case';
+  var darkTag = document.createElement('span');
+  darkTag.className = 'case-tag';
+  darkTag.textContent = 'dark · high';
+  var darkHost = document.createElement('div');
+  darkRow.appendChild(darkTag); darkRow.appendChild(darkHost);
+  dark.appendChild(darkRow);
+  var darkOne = instance('high');
+  renderInto(darkHost, React.createElement(darkOne.Component, darkOne.props));
+
+  // ---- 4. 断言：把结果写进 document.title，截图之外也能读 ------------------
+  var problems = [];
+  if (main.props.available !== true) problems.push('available=false');
+  if (main.props.store === null) problems.push('store=null');
+
+  // 隐藏用例：仅一个档位 → 必须不渲染任何东西
+  var single = instance('off', { groups: [{ id: 'deepseek-account', name: 'x', models: [{ id: 'deepseek-flash', name: 'y', reasoning: { defaultEffort: 'off', efforts: [EFFORTS[0]] } }] }] });
+  var probe = document.createElement('div');
+  document.body.appendChild(probe);
+  renderInto(probe, React.createElement(single.Component, single.props));
+
+  // 隐藏用例：模型没有推理元数据 → 必须不渲染
+  var none = instance('off', { groups: [{ id: 'deepseek-account', name: 'x', models: [{ id: 'deepseek-flash', name: 'y' }] }] });
+  var probe2 = document.createElement('div');
+  document.body.appendChild(probe2);
+  renderInto(probe2, React.createElement(none.Component, none.props));
+
+  // 隐藏用例：subagent 会话 → 必须不渲染
+  var sub = instance('high', { subagent: true });
+  var probe3 = document.createElement('div');
+  document.body.appendChild(probe3);
+  renderInto(probe3, React.createElement(sub.Component, sub.props));
+
+  setTimeout(function () {
+    var mainHtml = document.getElementById('slot-right').innerHTML;
+    var inputs = document.querySelectorAll('[data-mrh-range]');
+    var ticks = document.querySelectorAll('[data-mrh-tick]');
+    var hiddenOk = probe.innerHTML === '' && probe2.innerHTML === '' && probe3.innerHTML === '';
+    var title = 'ranges=' + inputs.length + ' ticks=' + ticks.length + ' thumbs=' + document.querySelectorAll('[data-mrh-thumb]').length +
+      ' hiddenCase=' + (hiddenOk ? 'ok' : 'FAIL(' + probe.innerHTML.length + '/' + probe2.innerHTML.length + '/' + probe3.innerHTML.length + ')') +
+      ' mainRendered=' + (mainHtml.indexOf('data-mrh-range') !== -1 ? 'yes' : 'NO') +
+      ' selectCalls=' + selectCalls.length +
+      (problems.length ? ' PROBLEMS=' + problems.join(',') : '');
+    document.title = title;
+    var out = document.createElement('pre');
+    out.id = 'result';
+    out.style.cssText = 'font-size:12px;background:var(--dsw-alias-bg-layer-2);padding:10px;border-radius:8px;margin-top:18px;white-space:pre-wrap';
+    out.textContent = title;
+    document.body.appendChild(out);
+  }, 60);
+})();
+</script>
+<script>
+// ---- 5. 交互测试：拖动滑杆必须提交正确的 provider/model/reasoningEffort ----
+(function () {
+  setTimeout(function () {
+    var out = document.getElementById('result');
+    var base = out ? out.textContent : '';
+    var rangeInput = document.querySelector('#slot-right [data-mrh-range]');
+    var calls = window.__selectCalls;
+    var before = calls.length;
+    var note = '';
+
+    if (!rangeInput) {
+      note = 'NO_INPUT';
+    } else {
+      var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      var fire = function (v) {
+        setter.call(rangeInput, String(v));
+        rangeInput.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      fire(3);                      // 拖到 Max
+      fire(0); fire(1); fire(2);    // 快速拖回 High（检查合并队列不丢最终值）
+    }
+
+    setTimeout(function () {
+      var made = calls.slice(before);
+      var last = made[made.length - 1];
+      var title = base +
+        ' | interactions=' + made.length +
+        ' seq=' + made.map(function (c) { return c.reasoningEffort; }).join('>') +
+        ' last=' + (last ? (last.provider + '/' + last.model + '/' + last.reasoningEffort) : 'none') +
+        ' keys=' + (last ? Object.keys(last).sort().join('+') : '-') +
+        (note ? ' NOTE=' + note : '');
+      var out2 = document.getElementById('result') || document.createElement('pre');
+      out2.id = 'result';
+      out2.textContent = title;
+      if (!out2.parentNode) document.body.appendChild(out2);
+      document.title = title;
+    }, 90);
+  }, 120);
+})();
+</script>
+<script>
+// ---- 6. 几何校验：填充右缘 / 刻度中心 / 滑钮预期位置必须重合 ----------------
+(function () {
+  setTimeout(function () {
+    var report = [];
+    var worst = 0;
+    var cases = document.querySelectorAll('#cases .case');
+    Array.prototype.forEach.call(cases, function (row) {
+      var label = row.querySelector('.case-tag').textContent.replace('effort = ', '');
+      var dial = row.querySelector('[data-mrh-dial]');
+      if (!dial) { report.push(label + ':no-dial'); return; }
+      var rail = dial.querySelector('[data-mrh-rail]').getBoundingClientRect();
+      var ticks = dial.querySelectorAll('[data-mrh-tick]');
+      var input = dial.querySelector('[data-mrh-range]');
+      var fill = dial.querySelector('[data-mrh-fill]');
+      var thumb = dial.querySelector('[data-mrh-thumb]');
+      var index = Number(input.value);
+      var n = ticks.length;
+
+      // 原生 range 的滑钮中心行程：两端各缩进 滑钮半径 = 7px
+      var expectedKnobX = rail.left + rail.width * (n > 1 ? index / (n - 1) : 0);
+      var tickX = (function () { var r = ticks[index].getBoundingClientRect(); return r.left + r.width / 2; })();
+      var devTick = Math.abs(expectedKnobX - tickX);
+
+      // 视觉滑钮（DeepSeek 鲸鱼）必须压在和原生滑钮同一个中心点上
+      var thumbRect = thumb.getBoundingClientRect();
+      var devThumb = Math.abs(thumbRect.left + thumbRect.width / 2 - expectedKnobX);
+
+      // 鲸鱼标必须真的画出来了（有 path 且尺寸非零），而且不能被圆片裁到
+      var fish = thumb.querySelector('svg path');
+      var fishOk = fish !== null && fish.getAttribute('d').length > 100 && thumbRect.width > 0;
+      var svgRect = thumb.querySelector('svg').getBoundingClientRect();
+      var fishMargin = ((thumbRect.width - 2) - svgRect.width) / 2; // -2: 圆片左右各 1px 描边
+
+      // 填充右缘应停在滑钮中心（index 0 时没有填充元素）
+      var devFill = null;
+      if (fill) {
+        devFill = Math.abs(fill.getBoundingClientRect().right - expectedKnobX);
+      } else if (index !== 0) {
+        devFill = -1;
+      }
+
+      worst = Math.max(worst, devTick, devThumb, devFill === null ? 0 : devFill);
+      report.push(label + ':knob-tick=' + devTick.toFixed(2) + 'px' +
+        '/thumb=' + devThumb.toFixed(2) + 'px' +
+        '/fill=' + (devFill === null ? 'n/a(0)' : devFill.toFixed(2) + 'px') +
+        '/rail=' + rail.width.toFixed(1) + 'px' +
+        '/margin=' + fishMargin.toFixed(1) + 'px' +
+        (fishOk && fishMargin >= 0.5 ? '' : '/FISH-BAD'));
+    });
+
+    var out = document.getElementById('result');
+    var title = (out ? out.textContent : '') + ' || GEOM worst=' + worst.toFixed(2) + 'px :: ' + report.join(' ; ');
+    if (out) out.textContent = title;
+    document.title = title;
+  }, 320);
+})();
+</script>
+</body>
+</html>
