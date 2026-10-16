@@ -369,10 +369,76 @@ window.__ModuleLoader__.load({
 		}
 
 		/* ------------------------------------------------------------------ *
+		 * 槽位适配层（本地补丁，非作者原代码）
+		 *
+		 * 实测：本 build 的列表槽位不把 register({ inject }) 的返回值透传给组件——
+		 * 在同一插槽内用哨兵 prop 验证过，注入值在任何实例（composer 内 14 键实例、
+		 * 其余 32 个 7 键实例）都没有到达组件。于是 RheostatControl 永远拿到
+		 * store === undefined，按自身门槛安静地 return null（无报错、无 DOM）。
+		 *
+		 * 这里改走插槽的标准 props：用 props.sessionId 自取会话目录，目录未就绪时
+		 * 做有界重试；档位读取、提交队列等其余逻辑一律保持原作者实现。
+		 * ------------------------------------------------------------------ */
+
+		var capturedCtx = null;
+
+		function RheostatSlot(props) {
+			var models;
+			try {
+				/* Reading a required service off an inactive context throws. */
+				models = capturedCtx ? capturedCtx.modelDirectories : undefined;
+			} catch (error) {
+				models = undefined;
+			}
+			var sessionId = props ? props.sessionId : undefined;
+			var directory = null;
+			try {
+				if (sessionId !== undefined && sessionId !== null && models && typeof models.directoryFor === "function") {
+					directory = models.directoryFor(sessionId) || null;
+				}
+			} catch (error) {
+				directory = null;
+			}
+
+			var tick = React.useState(0);
+			var bump = tick[1];
+			React.useEffect(function () {
+				if (directory !== null) return undefined;
+				var tries = 0;
+				var timer = setInterval(function () {
+					tries += 1;
+					if (tries > 20) { clearInterval(timer); return; }
+					bump(function (value) { return value + 1; });
+				}, 300);
+				return function () { clearInterval(timer); };
+			}, [directory]);
+
+			var available = true;
+			try {
+				var sessions = capturedCtx ? capturedCtx.sessions : undefined;
+				if (sessions && typeof sessions.subagentAddress === "function" && sessions.subagentAddress(sessionId) !== undefined) {
+					available = false;
+				}
+			} catch (error) {
+				/* 按普通会话处理 */
+			}
+
+			return React.createElement(RheostatControl, {
+				available: available,
+				store: directory ? directory.store : null,
+				select: function (selection) {
+					if (!available || !directory) return Promise.resolve(UNAVAILABLE);
+					return directory.select(selection);
+				}
+			});
+		}
+
+		/* ------------------------------------------------------------------ *
 		 * 插件
 		 * ------------------------------------------------------------------ */
 
 		function apply(ctx) {
+			capturedCtx = ctx;
 			var styleElement = ensureStyle();
 			if (styleElement !== null) {
 				ctx.effect(function () {
@@ -389,7 +455,7 @@ window.__ModuleLoader__.load({
 							order: 10,
 							label: function () { return "模型强度"; },
 							inject: function (sessionId) { return injectProps(ctx, sessionId); }
-						}, RheostatControl);
+						}, RheostatSlot);
 					} catch (error) {
 						console.warn("[model-rheostat] conversation.input.right 注册失败：", error);
 						return undefined;
